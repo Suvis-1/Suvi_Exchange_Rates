@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Favicon - using your Logo.ico in public folder -->
+    <link rel="icon" type="image/x-icon" href="/Logo.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Live mid-market currency exchange rates with GBP as base. Real-time updates, search, inverse view, and customizable currency list." />
+    <meta name="theme-color" content="#0066cc" />
+    
+    <title>Suvi Exchange Rates | Live GBP Currency Converter</title>
+
+    <!-- Open Graph / Social Sharing -->
+    <meta property="og:title" content="Suvi Exchange Rates - Live GBP Rates" />
+    <meta property="og:description" content="Real-time mid-market currency rates with GBP base. Updated every minute with search and inverse view." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://suvis-1.github.io/Suvi_Exchange_Rates" />
+    <meta property="og:image" content="https://suvis-1.github.io/Suvi_Exchange_Rates/og-preview.jpg" />
+    
+    <style>
+      /* Global reset and loading screen */
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        background: linear-gradient(to bottom, #f0f4f8, #d9e2ec);
+        min-height: 100vh;
+        color: #1a3c6d;
+      }
+      #app {
+        min-height: 100vh;
+      }
+      .loading {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        text-align: center;
+        font-size: 1.5em;
+        color: #0066cc;
+      }
+      .loading::after {
+        content: '';
+        width: 40px;
+        height: 40px;
+        border: 4px solid #0066cc;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-top: 20px;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="loading">
+        <div>Loading Suvi Exchange Rates...</div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
