@@ -1,254 +1,1835 @@
 <template>
   <div class="container">
+    <!-- Header -->
     <header class="header">
-      <h1>Live Currency Rates (Base: GBP)</h1>
-      <p class="timestamp">Last updated: {{ timestamp || 'Loading...' }}</p>
-    </header>
-
-    <div class="controls">
-      <button @click="isInverse = !isInverse" class="btn">
-        {{ isInverse ? 'Normal View (1 GBP = X)' : 'Inverse View (1 CURR = X GBP)' }}
-      </button>
-      <button @click="isEdit = !isEdit" class="btn secondary">
-        {{ isEdit ? 'Done Editing' : 'Edit List' }}
-      </button>
-    </div>
-
-    <input v-model="searchQuery" placeholder="Search currency (e.g., EUR, BTC)" class="search" />
-
-    <transition name="fade">
-      <div v-if="filteredResults.length" class="search-results">
-        <div v-for="code in filteredResults" :key="code" class="result-item" @click="addCurrency(code)">
-          {{ code }} <span class="add">+ Add</span>
+      <div class="header-top">
+        <h1>
+          <span class="currency-icon">💱</span>
+          Suvi Currency Exchange Rates
+        </h1>
+        <div class="header-controls">
+          <div class="status-section">
+            <div class="status-indicator" :class="{ 'status-error': hasError }">
+              <span class="status-dot"></span>
+              {{ statusText }}
+            </div>
+            <div class="auto-refresh-header" v-if="!hasError">
+              <label class="refresh-label">
+                <input type="checkbox" v-model="autoRefresh" class="refresh-toggle" />
+                <span class="refresh-text">Auto-refresh</span>
+              </label>
+              <div class="refresh-countdown" v-if="autoRefresh">
+                {{ formatCountdown }}
+              </div>
+            </div>
+          </div>
+          <button @click="refreshNow" class="btn-refresh" :disabled="isRefreshing">
+            <span class="refresh-icon" :class="{ 'refresh-icon-spinning': isRefreshing }">
+              {{ isRefreshing ? '⏳' : '🔄' }}
+            </span>
+          </button>
         </div>
       </div>
-    </transition>
+      <p class="timestamp" v-if="timestamp">
+        <span class="timestamp-icon">🕒</span>
+        {{ timestamp }}
+      </p>
+    </header>
 
-    <ul class="rates-list" :class="{ 'edit-mode': isEdit }">
-      <li v-for="code in displayedCurrencies" :key="code">
-        <span class="rate">
-          {{ formatRate(code) }}
-        </span>
-        <span class="remove" @click="removeCurrency(code)">✕ Remove</span>
-      </li>
-      <li v-if="displayedCurrencies.length === 0" class="empty">No currencies added yet</li>
-    </ul>
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Search and Controls -->
+      <div class="top-controls">
+        <div class="search-container">
+          <div class="search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input 
+              v-model="searchQuery" 
+              placeholder="Search currency (BTC, ETH, USD, Euro, Bitcoin...)" 
+              class="search-input"
+              @focus="showSearchResults = true"
+              @blur="onSearchBlur"
+            />
+            <button v-if="searchQuery" @click="clearSearch" class="clear-search" title="Clear search">
+              ×
+            </button>
+          </div>
+          
+          <!-- Search Results -->
+          <transition name="slide-fade">
+            <div v-if="showSearchResults && filteredResults.length" class="search-results" @mousedown.prevent>
+              <div class="results-scroll">
+                <div 
+                  v-for="item in filteredResults" 
+                  :key="item.code" 
+                  class="result-item"
+                  @click="addCurrency(item.code)"
+                >
+                  <div class="result-flag">
+                    <img 
+                      :src="getFlagUrl(item.code)" 
+                      :alt="`${item.code} flag`"
+                      class="flag-image"
+                      v-if="!isSpecialCurrency(item.code)"
+                    />
+                    <span v-else class="special-symbol">{{ getSpecialSymbol(item.code) }}</span>
+                  </div>
+                  <div class="result-details">
+                    <strong>{{ item.code }}</strong>
+                    <small>{{ item.name }}</small>
+                  </div>
+                  <span class="add-btn">+</span>
+                </div>
+              </div>
+            </div>
+          </transition>
+        </div>
+        
+        <div class="action-buttons">
+          <button @click="toggleInverse" class="btn-action" :class="{ 'btn-active': isInverse }" title="Toggle view">
+            {{ isInverse ? '1 CUR = X GBP' : '1 GBP = X' }}
+          </button>
+          <button @click="resetToDefaults" class="btn-action" title="Reset to defaults">
+            🔄
+          </button>
+        </div>
+      </div>
+
+      <!-- Currency List -->
+      <div class="rates-container">
+        <div class="rates-header">
+          <div class="rates-title">
+            <h2>Tracked Currencies</h2>
+            <span class="rates-count">{{ displayedCurrencies.length }}</span>
+          </div>
+          <div class="view-mode">
+            {{ isInverse ? 'Inverse View' : 'Normal View' }}
+          </div>
+        </div>
+        
+        <!-- Skeleton loading -->
+        <div v-if="loading" class="skeleton-list">
+          <div v-for="n in 5" :key="n" class="skeleton-item">
+            <div class="skeleton-flag"></div>
+            <div class="skeleton-details">
+              <div class="skeleton-line skeleton-line-large"></div>
+              <div class="skeleton-line skeleton-line-small"></div>
+            </div>
+            <div class="skeleton-rate"></div>
+          </div>
+        </div>
+        
+        <!-- Empty state -->
+        <div v-else-if="displayedCurrencies.length === 0" class="empty-state">
+          <div class="empty-icon">📊</div>
+          <h3>No currencies added</h3>
+          <p>Search for currencies above or</p>
+          <button @click="resetToDefaults" class="btn-action">
+            Load Defaults
+          </button>
+        </div>
+        
+        <!-- Scrollable rates list -->
+        <div v-else class="rates-list-scrollable">
+          <transition-group name="list" tag="div" class="rates-list">
+            <div 
+              v-for="code in displayedCurrencies" 
+              :key="`${code}-${isInverse}`"
+              class="rate-card"
+              :class="{ 'rate-card-highlight': hoveredCurrency === code }"
+              @mouseenter="hoveredCurrency = code"
+              @mouseleave="hoveredCurrency = null"
+            >
+              <div class="rate-card-content">
+                <div class="currency-info">
+                  <div class="currency-flag">
+                    <img 
+                      :src="getFlagUrl(code)" 
+                      :alt="`${code} flag`"
+                      class="flag-image"
+                      v-if="!isSpecialCurrency(code)"
+                    />
+                    <span v-else class="special-symbol">{{ getSpecialSymbol(code) }}</span>
+                  </div>
+                  <div class="currency-details">
+                    <h3 class="currency-code">{{ code }}</h3>
+                    <p class="currency-name">{{ getCurrencyName(code) }}</p>
+                  </div>
+                </div>
+                
+                <div class="rate-display">
+                  <div class="rate-value">
+                    {{ formatRate(code) }}
+                  </div>
+                  <div class="rate-meta" v-if="getRateChange(code) !== '--'">
+                    <span class="rate-trend">{{ getTrendIcon(code) }}</span>
+                    <span class="rate-change" :class="getChangeClass(code)">
+                      {{ getRateChange(code) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="rate-card-actions">
+                <button @click="removeCurrency(code)" class="action-btn" title="Remove">
+                  ✕
+                </button>
+              </div>
+            </div>
+          </transition-group>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-content">
+        <div class="footer-info">
+          <span class="data-source">Live Market Rates</span>
+          <span class="app-version">v2.0</span>
+        </div>
+      </div>
+    </footer>
+    
+    <!-- Toast notifications -->
+    <transition name="slide-up">
+      <div v-if="toast.show" class="toast" :class="`toast-${toast.type}`">
+        <span class="toast-icon">{{ toast.icon }}</span>
+        <span class="toast-message">{{ toast.message }}</span>
+        <button @click="toast.show = false" class="toast-close">×</button>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 
+// State
 const rates = ref({})
+const ratesHistory = ref({})
 const timestamp = ref('')
 const searchQuery = ref('')
 const isInverse = ref(false)
-const isEdit = ref(false)
-const displayedCurrencies = ref(['EUR', 'USD', 'INR', 'JPY', 'BTC', 'CHF', 'CAD', 'AUD', 'CNY'])
-
-const apiUrl = import.meta.env.VITE_API_URL
-
-onMounted(async () => {
-  await fetchRates()
-  // Update every 1 minute (60 seconds)
-  setInterval(fetchRates, 60000)
+const showSearchResults = ref(false)
+const hoveredCurrency = ref(null)
+const loading = ref(true)
+const hasError = ref(false)
+const lastUpdateTime = ref(null)
+const autoRefresh = ref(true)
+const isRefreshing = ref(false)
+const countdown = ref(60) // 60 seconds countdown
+const toast = ref({
+  show: false,
+  message: '',
+  type: 'info',
+  icon: 'ℹ️'
 })
 
-async function fetchRates() {
-  try {
-    const res = await fetch(apiUrl)
-    if (!res.ok) throw new Error('Network error')
-    const data = await res.json()
-    rates.value = data.rates || {}
-    timestamp.value = new Date(data.timestamp).toLocaleString()
-  } catch (err) {
-    console.error('Fetch error:', err)
-    timestamp.value = 'Error loading rates'
-  }
+// Default currencies
+const displayedCurrencies = ref([])
+
+// Currency to country mapping (comprehensive)
+const currencyToCountry = {
+  AED: 'ae', // UAE
+  AFN: 'af', // Afghanistan
+  ALL: 'al', // Albania
+  AMD: 'am', // Armenia
+  ANG: 'sx', // Sint Maarten
+  AOA: 'ao', // Angola
+  ARS: 'ar', // Argentina
+  AUD: 'au', // Australia
+  AWG: 'aw', // Aruba
+  AZN: 'az', // Azerbaijan
+  BAM: 'ba', // Bosnia and Herzegovina
+  BBD: 'bb', // Barbados
+  BDT: 'bd', // Bangladesh
+  BGN: 'bg', // Bulgaria
+  BHD: 'bh', // Bahrain
+  BIF: 'bi', // Burundi
+  BMD: 'bm', // Bermuda
+  BND: 'bn', // Brunei
+  BOB: 'bo', // Bolivia
+  BRL: 'br', // Brazil
+  BSD: 'bs', // Bahamas
+  BTN: 'bt', // Bhutan
+  BWP: 'bw', // Botswana
+  BYN: 'by', // Belarus
+  BZD: 'bz', // Belize
+  CAD: 'ca', // Canada
+  CDF: 'cd', // Congo
+  CHF: 'ch', // Switzerland
+  CLP: 'cl', // Chile
+  CNY: 'cn', // China
+  COP: 'co', // Colombia
+  CRC: 'cr', // Costa Rica
+  CUP: 'cu', // Cuba
+  CVE: 'cv', // Cape Verde
+  CZK: 'cz', // Czech Republic
+  DJF: 'dj', // Djibouti
+  DKK: 'dk', // Denmark
+  DOP: 'do', // Dominican Republic
+  DZD: 'dz', // Algeria
+  EGP: 'eg', // Egypt
+  ERN: 'er', // Eritrea
+  ETB: 'et', // Ethiopia
+  FJD: 'fj', // Fiji
+  FKP: 'fk', // Falkland Islands
+  GBP: 'gb', // United Kingdom
+  GEL: 'ge', // Georgia
+  GHS: 'gh', // Ghana
+  GIP: 'gi', // Gibraltar
+  GMD: 'gm', // Gambia
+  GNF: 'gn', // Guinea
+  GTQ: 'gt', // Guatemala
+  GYD: 'gy', // Guyana
+  HKD: 'hk', // Hong Kong
+  HNL: 'hn', // Honduras
+  HRK: 'hr', // Croatia
+  HTG: 'ht', // Haiti
+  HUF: 'hu', // Hungary
+  IDR: 'id', // Indonesia
+  ILS: 'il', // Israel
+  INR: 'in', // India
+  IQD: 'iq', // Iraq
+  IRR: 'ir', // Iran
+  ISK: 'is', // Iceland
+  JMD: 'jm', // Jamaica
+  JOD: 'jo', // Jordan
+  JPY: 'jp', // Japan
+  KES: 'ke', // Kenya
+  KGS: 'kg', // Kyrgyzstan
+  KHR: 'kh', // Cambodia
+  KMF: 'km', // Comoros
+  KPW: 'kp', // North Korea
+  KRW: 'kr', // South Korea
+  KWD: 'kw', // Kuwait
+  KYD: 'ky', // Cayman Islands
+  KZT: 'kz', // Kazakhstan
+  LAK: 'la', // Laos
+  LBP: 'lb', // Lebanon
+  LKR: 'lk', // Sri Lanka
+  LRD: 'lr', // Liberia
+  LSL: 'ls', // Lesotho
+  LYD: 'ly', // Libya
+  MAD: 'ma', // Morocco
+  MDL: 'md', // Moldova
+  MGA: 'mg', // Madagascar
+  MKD: 'mk', // North Macedonia
+  MMK: 'mm', // Myanmar
+  MNT: 'mn', // Mongolia
+  MOP: 'mo', // Macau
+  MRU: 'mr', // Mauritania
+  MUR: 'mu', // Mauritius
+  MVR: 'mv', // Maldives
+  MWK: 'mw', // Malawi
+  MXN: 'mx', // Mexico
+  MYR: 'my', // Malaysia
+  MZN: 'mz', // Mozambique
+  NAD: 'na', // Namibia
+  NGN: 'ng', // Nigeria
+  NIO: 'ni', // Nicaragua
+  NOK: 'no', // Norway
+  NPR: 'np', // Nepal
+  NZD: 'nz', // New Zealand
+  OMR: 'om', // Oman
+  PAB: 'pa', // Panama
+  PEN: 'pe', // Peru
+  PGK: 'pg', // Papua New Guinea
+  PHP: 'ph', // Philippines
+  PKR: 'pk', // Pakistan
+  PLN: 'pl', // Poland
+  PYG: 'py', // Paraguay
+  QAR: 'qa', // Qatar
+  RON: 'ro', // Romania
+  RSD: 'rs', // Serbia
+  RUB: 'ru', // Russia
+  RWF: 'rw', // Rwanda
+  SAR: 'sa', // Saudi Arabia
+  SBD: 'sb', // Solomon Islands
+  SCR: 'sc', // Seychelles
+  SDG: 'sd', // Sudan
+  SEK: 'se', // Sweden
+  SGD: 'sg', // Singapore
+  SHP: 'sh', // Saint Helena
+  SLL: 'sl', // Sierra Leone
+  SOS: 'so', // Somalia
+  SRD: 'sr', // Suriname
+  SSP: 'ss', // South Sudan
+  STN: 'st', // São Tomé and Príncipe
+  SYP: 'sy', // Syria
+  SZL: 'sz', // Eswatini
+  THB: 'th', // Thailand
+  TJS: 'tj', // Tajikistan
+  TMT: 'tm', // Turkmenistan
+  TND: 'tn', // Tunisia
+  TOP: 'to', // Tonga
+  TRY: 'tr', // Turkey
+  TTD: 'tt', // Trinidad and Tobago
+  TWD: 'tw', // Taiwan
+  TZS: 'tz', // Tanzania
+  UAH: 'ua', // Ukraine
+  UGX: 'ug', // Uganda
+  USD: 'us', // United States
+  UYU: 'uy', // Uruguay
+  UZS: 'uz', // Uzbekistan
+  VES: 've', // Venezuela
+  VND: 'vn', // Vietnam
+  VUV: 'vu', // Vanuatu
+  WST: 'ws', // Samoa
+  YER: 'ye', // Yemen
+  ZAR: 'za', // South Africa
+  ZMW: 'zm', // Zambia
+  ZWL: 'zw', // Zimbabwe
 }
 
-const allCodes = computed(() => Object.keys(rates.value).sort())
+// Special currencies with symbols
+const specialCurrencies = {
+  // Cryptocurrencies
+  BTC: { symbol: '₿', name: 'Bitcoin' },
+  ETH: { symbol: 'Ξ', name: 'Ethereum' },
+  ADA: { symbol: '₳', name: 'Cardano' },
+  BNB: { symbol: 'ⓑ', name: 'Binance Coin' },
+  BCH: { symbol: 'Ƀ', name: 'Bitcoin Cash' },
+  DOGE: { symbol: 'Ð', name: 'Dogecoin' },
+  DOT: { symbol: '●', name: 'Polkadot' },
+  LINK: { symbol: '🔗', name: 'Chainlink' },
+  LTC: { symbol: 'Ł', name: 'Litecoin' },
+  SOL: { symbol: '◎', name: 'Solana' },
+  UNI: { symbol: '🦄', name: 'Uniswap' },
+  XRP: { symbol: '✕', name: 'Ripple' },
+  XLM: { symbol: '*', name: 'Stellar' },
+  LUNA: { symbol: '🌙', name: 'Terra' },
+  XBT: { symbol: '₿', name: 'Bitcoin (XBT)' },
+  
+  // Stablecoins
+  USDC: { symbol: '💵', name: 'USD Coin' },
+  USDT: { symbol: '💵', name: 'Tether' },
+  USDP: { symbol: '💵', name: 'Pax Dollar' },
+  EURC: { symbol: '💶', name: 'Euro Coin' },
+  
+  // Special currencies
+  EUR: { symbol: '€', name: 'Euro', flag: 'eu' },
+  XAF: { symbol: 'FCFA', name: 'Central African CFA Franc', flag: 'cm' },
+  XOF: { symbol: 'CFA', name: 'West African CFA Franc', flag: 'sn' },
+  XCD: { symbol: '$', name: 'East Caribbean Dollar', flag: 'ag' },
+  XDR: { symbol: 'SDR', name: 'Special Drawing Rights', flag: 'imf' },
+  XAU: { symbol: '🥇', name: 'Gold (ounce)' },
+  XAG: { symbol: '🥈', name: 'Silver (ounce)' },
+  XPT: { symbol: '⚙️', name: 'Platinum' },
+  XPD: { symbol: '🔩', name: 'Palladium' },
+  
+  // Historical currencies
+  ATS: { symbol: 'ÖS', name: 'Austrian Schilling' },
+  BEF: { symbol: 'FB', name: 'Belgian Franc' },
+  CYP: { symbol: '£', name: 'Cypriot Pound' },
+  DEM: { symbol: 'DM', name: 'German Mark' },
+  ESP: { symbol: '₧', name: 'Spanish Peseta' },
+  FIM: { symbol: 'mk', name: 'Finnish Markka' },
+  FRF: { symbol: '₣', name: 'French Franc' },
+  GRD: { symbol: 'Δρ', name: 'Greek Drachma' },
+  IEP: { symbol: '£', name: 'Irish Pound' },
+  ITL: { symbol: '₤', name: 'Italian Lira' },
+  LUF: { symbol: 'F', name: 'Luxembourg Franc' },
+  MTL: { symbol: '₤', name: 'Maltese Lira' },
+  NLG: { symbol: 'ƒ', name: 'Dutch Guilder' },
+  PTE: { symbol: 'Esc', name: 'Portuguese Escudo' },
+  SIT: { symbol: 'SIT', name: 'Slovenian Tolar' },
+  SKK: { symbol: 'Sk', name: 'Slovak Koruna' },
+  VAL: { symbol: 'V', name: 'Vale' },
+  
+  // Obsolete currencies
+  EEK: { symbol: 'kr', name: 'Estonian Kroon' },
+  LTL: { symbol: 'Lt', name: 'Lithuanian Litas' },
+  LVL: { symbol: 'Ls', name: 'Latvian Lats' },
+  MGF: { symbol: 'MG', name: 'Malagasy Franc' },
+  MRO: { symbol: 'UM', name: 'Mauritanian Ouguiya' },
+  MZM: { symbol: 'Mt', name: 'Mozambican Metical' },
+  SDD: { symbol: 'LSd', name: 'Sudanese Dinar' },
+  SRG: { symbol: 'ƒ', name: 'Surinamese Guilder' },
+  STD: { symbol: 'Db', name: 'São Tomé Dobra' },
+  TRL: { symbol: '₤', name: 'Turkish Lira (old)' },
+  VEB: { symbol: 'Bs', name: 'Venezuelan Bolívar (old)' },
+  VEF: { symbol: 'Bs.F', name: 'Venezuelan Bolívar Fuerte' },
+  ZMK: { symbol: 'ZK', name: 'Zambian Kwacha (old)' },
+  ZWD: { symbol: 'Z$', name: 'Zimbabwean Dollar (old)' },
+  ZWG: { symbol: 'Z$', name: 'Zimbabwean Gold' },
+}
+
+// Function to generate currency name for unknown currencies
+function generateCurrencyName(code) {
+  // Check if it's a cryptocurrency (3-4 letters, no numbers except at end)
+  if (/^[A-Z]{3,4}$/.test(code)) {
+    // Common cryptocurrency patterns
+    const cryptoPatterns = {
+      'BTC': 'Bitcoin',
+      'ETH': 'Ethereum', 
+      'XRP': 'Ripple',
+      'LTC': 'Litecoin',
+      'BCH': 'Bitcoin Cash',
+      'ADA': 'Cardano',
+      'DOT': 'Polkadot',
+      'LINK': 'Chainlink',
+      'BNB': 'Binance Coin',
+      'XLM': 'Stellar',
+      'DOGE': 'Dogecoin',
+      'SOL': 'Solana',
+      'LUNA': 'Terra',
+      'UNI': 'Uniswap',
+      'XBT': 'Bitcoin',
+      'USDC': 'USD Coin',
+      'USDT': 'Tether',
+      'USDP': 'Pax Dollar',
+      'EURC': 'Euro Coin',
+    }
+    
+    if (cryptoPatterns[code]) {
+      return cryptoPatterns[code]
+    }
+    
+    // Generic cryptocurrency name
+    return `${code} Cryptocurrency`
+  }
+  
+  // Check if it's a precious metal
+  if (code.startsWith('X')) {
+    const metalPatterns = {
+      'XAU': 'Gold',
+      'XAG': 'Silver', 
+      'XPT': 'Platinum',
+      'XPD': 'Palladium',
+      'XCG': 'East Caribbean Gold',
+      'XDR': 'Special Drawing Rights',
+    }
+    if (metalPatterns[code]) {
+      return metalPatterns[code]
+    }
+  }
+  
+  // Historical/obsolete currency detection
+  const historicalPatterns = {
+    'ATS': 'Austrian Schilling',
+    'BEF': 'Belgian Franc',
+    'CYP': 'Cypriot Pound',
+    'DEM': 'German Mark',
+    'EEK': 'Estonian Kroon',
+    'ESP': 'Spanish Peseta',
+    'FIM': 'Finnish Markka',
+    'FRF': 'French Franc',
+    'GRD': 'Greek Drachma',
+    'IEP': 'Irish Pound',
+    'ITL': 'Italian Lira',
+    'LTL': 'Lithuanian Litas',
+    'LUF': 'Luxembourg Franc',
+    'LVL': 'Latvian Lats',
+    'MGF': 'Malagasy Franc',
+    'MRO': 'Mauritanian Ouguiya',
+    'MZM': 'Mozambican Metical',
+    'MTL': 'Maltese Lira',
+    'NLG': 'Dutch Guilder',
+    'PTE': 'Portuguese Escudo',
+    'SDD': 'Sudanese Dinar',
+    'SIT': 'Slovenian Tolar',
+    'SKK': 'Slovak Koruna',
+    'SRG': 'Surinamese Guilder',
+    'STD': 'São Tomé Dobra',
+    'TRL': 'Turkish Lira (old)',
+    'VEB': 'Venezuelan Bolívar (old)',
+    'VEF': 'Venezuelan Bolívar Fuerte',
+    'ZMK': 'Zambian Kwacha (old)',
+    'ZWD': 'Zimbabwean Dollar (old)',
+    'ZWG': 'Zimbabwean Gold',
+    'ZWL': 'Zimbabwean Dollar (new)',
+  }
+  
+  if (historicalPatterns[code]) {
+    return historicalPatterns[code]
+  }
+  
+  // Default: return code as name
+  return `${code} Currency`
+}
+
+// Currency metadata with names - dynamically generated
+const currencyMetadata = computed(() => {
+  const metadata = {}
+  
+  // Add all currencies from rates
+  Object.keys(rates.value).forEach(code => {
+    if (code !== 'GBP') {
+      // Check special currencies first
+      if (specialCurrencies[code]) {
+        metadata[code] = { name: specialCurrencies[code].name }
+      } else {
+        // Generate name based on pattern
+        metadata[code] = { name: generateCurrencyName(code) }
+      }
+    }
+  })
+  
+  return metadata
+})
+
+const suggestedCurrencies = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'BNB', 'SOL', 'XRP', 'LINK']
+
+// Computed properties
+const allCodes = computed(() => {
+  return Object.keys(rates.value)
+    .filter(code => code !== 'GBP')
+    .sort((a, b) => a.localeCompare(b))
+})
 
 const filteredResults = computed(() => {
   if (!searchQuery.value) return []
-  const query = searchQuery.value.toUpperCase()
+  
+  const query = searchQuery.value.toLowerCase()
+  const addedCodes = new Set(displayedCurrencies.value)
+  
   return allCodes.value
-    .filter(code => code.includes(query) && !displayedCurrencies.value.includes(code))
-    .slice(0, 15)
+    .filter(code => {
+      const meta = currencyMetadata.value[code]
+      if (!meta) return false
+      
+      const codeMatch = code.toLowerCase().includes(query)
+      const nameMatch = meta.name.toLowerCase().includes(query)
+      
+      return (codeMatch || nameMatch) && !addedCodes.has(code)
+    })
+    .slice(0, 12) // Increased from 8 to 12 to show more results
+    .map(code => ({
+      code,
+      name: currencyMetadata.value[code]?.name || generateCurrencyName(code),
+    }))
 })
+
+const statusText = computed(() => {
+  if (hasError.value) return 'Error'
+  if (loading.value) return 'Loading...'
+  if (!lastUpdateTime.value) return 'Waiting'
+  return 'Live'
+})
+
+const formatCountdown = computed(() => {
+  if (countdown.value <= 0) return '0s'
+  return `${countdown.value}s`
+})
+
+// Lifecycle
+let refreshInterval = null
+let countdownInterval = null
+
+onMounted(async () => {
+  loadUserPreferences()
+  await fetchRates()
+  startCountdown()
+})
+
+onUnmounted(() => {
+  if (refreshInterval) clearInterval(refreshInterval)
+  if (countdownInterval) clearInterval(countdownInterval)
+  saveUserPreferences()
+})
+
+// Watch for changes
+watch(autoRefresh, (newValue) => {
+  if (newValue) {
+    startCountdown()
+  } else {
+    stopCountdown()
+  }
+})
+
+watch(displayedCurrencies, () => {
+  saveUserPreferences()
+}, { deep: true })
+
+// Methods
+function startCountdown() {
+  if (countdownInterval) clearInterval(countdownInterval)
+  countdown.value = 60
+  
+  countdownInterval = setInterval(() => {
+    countdown.value--
+    
+    if (countdown.value <= 0) {
+      if (autoRefresh.value && document.visibilityState === 'visible') {
+        fetchRates()
+      }
+      countdown.value = 60 // Reset countdown
+    }
+  }, 1000)
+}
+
+function stopCountdown() {
+  if (countdownInterval) clearInterval(countdownInterval)
+  countdown.value = 60
+}
+
+async function fetchRates() {
+  if (isRefreshing.value) return
+  
+  isRefreshing.value = true
+  loading.value = true
+  
+  try {
+   const apiUrl = import.meta.env.VITE_API_URL 
+    
+    let data = null
+    let lastError = null
+    
+
+      const res = await fetch(apiUrl)
+      if (res.ok) {
+        data = await res.json()
+      } else {
+        throw new Error(`API returned ${res.status}`)
+      }
+
+        
+    rates.value = data.rates || {}
+    
+    // Store rate history for change calculations
+    const now = new Date()
+    Object.keys(rates.value).forEach(code => {
+      if (!ratesHistory.value[code]) {
+        ratesHistory.value[code] = []
+      }
+      ratesHistory.value[code].push({
+        rate: rates.value[code],
+        timestamp: now
+      })
+      
+      // Keep only last 10 entries
+      if (ratesHistory.value[code].length > 10) {
+        ratesHistory.value[code].shift()
+      }
+    })
+    
+    // Update timestamp
+    if (data.timestamp) {
+      // Convert MongoDB timestamp to Date
+      const ts = data.timestamp
+      timestamp.value = new Date(ts).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    } else {
+      timestamp.value = new Date().toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    }
+    
+    lastUpdateTime.value = new Date()
+    
+    if (!hasError.value) {
+      showToast('Live rates updated', 'success', '✅')
+    }
+  } catch (err) {
+    console.error('Fetch error:', err)
+    hasError.value = true
+    showToast('Using offline data', 'error', '⚠️')
+  } finally {
+    loading.value = false
+    isRefreshing.value = false
+  }
+}
+
+
+async function refreshNow() {
+  await fetchRates()
+  if (autoRefresh.value) {
+    startCountdown()
+  }
+}
+
+function toggleInverse() {
+  isInverse.value = !isInverse.value
+  saveUserPreferences()
+}
 
 function formatRate(code) {
   const rate = rates.value[code]
-  if (!rate) return `${code}: N/A`
+  if (!rate || rate === 0) return '...'
   
-  let value = isInverse ? (1 / rate) : rate
-  let formatted = value.toFixed(6).replace(/\.?0+$/, '')
+  let value = isInverse.value ? (1 / rate) : rate
   
-  if (isInverse) {
-    return `1 ${code} = ${formatted} GBP`
+  // Format based on value
+  if (value >= 1000) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  } else if (value >= 10) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: 3 })
+  } else if (value >= 1) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: 4 })
+  } else if (value >= 0.01) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: 6 })
   } else {
-    return `1 GBP = ${formatted} ${code}`
+    return value.toExponential(4)
   }
+}
+
+function getCurrencyName(code) {
+  if (specialCurrencies[code]) {
+    return specialCurrencies[code].name
+  }
+  return currencyMetadata.value[code]?.name || generateCurrencyName(code)
+}
+
+// Helper functions for flags
+function isSpecialCurrency(code) {
+  return code in specialCurrencies && !specialCurrencies[code].flag
+}
+
+function getSpecialSymbol(code) {
+  return specialCurrencies[code]?.symbol || code
+}
+
+function getFlagUrl(code) {
+  // Check for special currencies with flags
+  if (specialCurrencies[code]?.flag) {
+    return `https://flagcdn.com/w40/${specialCurrencies[code].flag}.png`
+  }
+  
+  // Check for regular country-based currencies
+  const country = currencyToCountry[code]
+  if (country) {
+    return `https://flagcdn.com/w40/${country}.png`
+  }
+  
+  // For cryptocurrencies and special currencies without flags, return null to use symbol
+  if (specialCurrencies[code]) {
+    return null
+  }
+  
+  // Fallback: use a generic flag
+  return 'https://flagcdn.com/w40/un.png'
+}
+
+function getRateChange(code) {
+  const history = ratesHistory.value[code]
+  if (!history || history.length < 2) return '--'
+  
+  const current = history[history.length - 1].rate
+  const previous = history[history.length - 2].rate
+  const change = ((current - previous) / previous * 100)
+  
+  if (Math.abs(change) < 0.01) return '0.00%'
+  return change > 0 ? `+${change.toFixed(2)}%` : `${change.toFixed(2)}%`
+}
+
+function getTrendIcon(code) {
+  const change = getRateChange(code)
+  if (change.includes('+')) return '↗'
+  if (change.includes('-') && !change.includes('--')) return '↘'
+  return '→'
+}
+
+function getChangeClass(code) {
+  const change = getRateChange(code)
+  if (change.includes('+')) return 'change-positive'
+  if (change.includes('-') && !change.includes('--')) return 'change-negative'
+  return 'change-neutral'
 }
 
 function addCurrency(code) {
   if (!displayedCurrencies.value.includes(code)) {
     displayedCurrencies.value.push(code)
+    showToast(`${getCurrencyName(code)} added`, 'success', '✅')
   }
   searchQuery.value = ''
+  showSearchResults.value = false
 }
 
 function removeCurrency(code) {
   displayedCurrencies.value = displayedCurrencies.value.filter(c => c !== code)
+  showToast(`${getCurrencyName(code)} removed`, 'info', '🗑️')
+}
+
+function resetToDefaults() {
+  displayedCurrencies.value = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'SOL', 'XRP']
+  showToast('Crypto defaults loaded', 'info', '🔄')
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  showSearchResults.value = false
+}
+
+function onSearchBlur() {
+  setTimeout(() => {
+    showSearchResults.value = false
+  }, 200)
+}
+
+function showToast(message, type = 'info', icon = 'ℹ️') {
+  toast.value = {
+    show: true,
+    message,
+    type,
+    icon
+  }
+  
+  setTimeout(() => {
+    toast.value.show = false
+  }, 3000)
+}
+
+function loadUserPreferences() {
+  try {
+    const saved = localStorage.getItem('currencyDashboardPrefs')
+    if (saved) {
+      const prefs = JSON.parse(saved)
+      if (prefs.currencies && Array.isArray(prefs.currencies) && prefs.currencies.length > 0) {
+        displayedCurrencies.value = prefs.currencies
+      } else {
+        displayedCurrencies.value = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'SOL', 'XRP']
+      }
+      if (prefs.isInverse !== undefined) isInverse.value = prefs.isInverse
+      if (prefs.autoRefresh !== undefined) autoRefresh.value = prefs.autoRefresh
+    } else {
+      displayedCurrencies.value = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'SOL', 'XRP']
+    }
+  } catch (err) {
+    console.error('Failed to load preferences:', err)
+    displayedCurrencies.value = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'SOL', 'XRP']
+  }
+}
+
+function saveUserPreferences() {
+  try {
+    const prefs = {
+      currencies: displayedCurrencies.value,
+      isInverse: isInverse.value,
+      autoRefresh: autoRefresh.value,
+      lastSaved: new Date().toISOString()
+    }
+    localStorage.setItem('currencyDashboardPrefs', JSON.stringify(prefs))
+  } catch (err) {
+    console.error('Failed to save preferences:', err)
+  }
 }
 </script>
 
 <style scoped>
-* { box-sizing: border-box; }
+* { 
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 .container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 20px;
-  min-height: 100vh;
-  background: linear-gradient(to bottom, #f0f4f8, #d9e2ec);
-  font-family: 'Segoe UI', Arial, sans-serif;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-h1 {
-  color: #1a3c6d;
-  margin-bottom: 8px;
-}
-
-.timestamp {
-  color: #555;
-  font-size: 0.95em;
-}
-
-.controls {
-  text-align: center;
-  margin: 20px 0;
-}
-
-.btn {
-  padding: 12px 24px;
-  margin: 0 10px;
-  background: #0066cc;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 1em;
-  transition: background 0.3s;
-}
-
-.btn:hover {
-  background: #0052a3;
-}
-
-.btn.secondary {
-  background: #666;
-}
-
-.btn.secondary:hover {
-  background: #444;
-}
-
-.search {
-  display: block;
-  width: 90%;
-  max-width: 500px;
-  margin: 20px auto;
-  padding: 14px;
-  font-size: 1.1em;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.search-results {
-  max-width: 500px;
-  margin: 0 auto 20px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-width: 100%;
+  height: 100vh;
+  padding: 12px;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #334155;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-.result-item {
-  padding: 12px 16px;
-  cursor: pointer;
-  border-bottom: 1px solid #eee;
+/* Header */
+.header {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.header-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 8px;
+}
+
+h1 {
+  color: #1e293b;
+  font-size: 1.4rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.currency-icon {
+  font-size: 1.3em;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #dcfce7;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #166534;
+}
+
+.status-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.status-error .status-dot {
+  background: #ef4444;
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.auto-refresh-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.refresh-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+  color: #475569;
+}
+
+.refresh-toggle {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.refresh-text {
+  font-weight: 500;
+}
+
+.refresh-countdown {
+  background: #3b82f6;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  min-width: 24px;
+  text-align: center;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 0.7rem;
+}
+
+.btn-refresh {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1em;
+  transition: all 0.2s;
+}
+
+.btn-refresh:hover:not(:disabled) {
+  background: #e2e8f0;
+  transform: rotate(15deg);
+}
+
+.btn-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-icon-spinning {
+  animation: spin 1s linear infinite;
+}
+
+.timestamp {
+  color: #64748b;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timestamp-icon {
+  font-size: 0.9em;
+}
+
+/* Main Content */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 12px;
+}
+
+/* Top Controls */
+.top-controls {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.search-container {
+  flex: 1;
+  position: relative;
+}
+
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 1em;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 12px 12px 36px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  background: white;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.clear-search {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1.3em;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clear-search:hover {
+  color: #64748b;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-action {
+  padding: 10px 16px;
+  border: 2px solid #e2e8f0;
+  background: white;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-action:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.btn-action.btn-active {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+/* Search Results */
+.search-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.results-scroll {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.result-item {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .result-item:hover {
-  background: #f0f8ff;
+  background: #f8fafc;
 }
 
-.add {
-  color: #00aa00;
+.result-item:last-child {
+  border-bottom: none;
+}
+
+.result-flag {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.flag-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.special-symbol {
+  font-size: 1.5em;
+  line-height: 1;
+}
+
+.result-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.result-details strong {
+  font-size: 0.9rem;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-details small {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.add-btn {
+  width: 24px;
+  height: 24px;
+  background: #3b82f6;
+  color: white;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
   font-weight: bold;
+  flex-shrink: 0;
 }
 
-.rates-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 auto;
-  max-width: 700px;
-}
-
-.rates-list li {
+/* Rates Container */
+.rates-container {
+  flex: 1;
   background: white;
-  padding: 18px;
-  margin: 12px 0;
   border-radius: 12px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rates-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 1.2em;
-  transition: transform 0.2s;
+  margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
-.rates-list li:hover {
-  transform: translateY(-2px);
+.rates-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.rate {
+.rates-title h2 {
+  color: #1e293b;
+  font-size: 1.1rem;
   font-weight: 600;
-  color: #1a3c6d;
 }
 
-.remove {
-  color: #d00;
-  cursor: pointer;
-  font-size: 1.1em;
-  display: none;
+.rates-count {
+  background: #3b82f6;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
-.edit-mode .remove {
-  display: block;
+.view-mode {
+  font-size: 0.8rem;
+  color: #64748b;
+  padding: 4px 8px;
+  background: #f1f5f9;
+  border-radius: 6px;
 }
 
-.empty {
+/* Skeleton Loading */
+.skeleton-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 10px;
+  animation: shimmer 1.5s infinite linear;
+  background: linear-gradient(90deg, #f8fafc 25%, #f1f5f9 50%, #f8fafc 75%);
+  background-size: 200% 100%;
+}
+
+.skeleton-flag {
+  width: 32px;
+  height: 32px;
+  background: #e2e8f0;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skeleton-line {
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+
+.skeleton-line-large {
+  height: 16px;
+  width: 80px;
+}
+
+.skeleton-line-small {
+  height: 12px;
+  width: 60px;
+}
+
+.skeleton-rate {
+  width: 70px;
+  height: 24px;
+  background: #e2e8f0;
+  border-radius: 6px;
+}
+
+/* Empty State */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 20px;
   text-align: center;
-  color: #888;
-  font-style: italic;
 }
 
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s;
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  opacity: 0.5;
 }
 
-.fade-enter-from, .fade-leave-to {
+.empty-state h3 {
+  color: #1e293b;
+  margin-bottom: 8px;
+  font-size: 1.1rem;
+}
+
+.empty-state p {
+  color: #64748b;
+  margin-bottom: 20px;
+  font-size: 0.9rem;
+}
+
+/* Scrollable rates list */
+.rates-list-scrollable {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-right: -8px;
+  padding-right: 8px;
+}
+
+.rates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rate-card {
+  display: flex;
+  align-items: center;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.rate-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.rate-card-highlight {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.rate-card-content {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+}
+
+.currency-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.currency-flag {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.currency-details {
+  min-width: 0;
+}
+
+.currency-details h3 {
+  font-size: 1rem;
+  color: #1e293b;
+  margin-bottom: 2px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.currency-name {
+  color: #64748b;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rate-display {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 120px;
+}
+
+.rate-value {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.rate-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+
+.rate-change {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.change-positive {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.change-negative {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.change-neutral {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.rate-trend {
+  font-size: 0.9em;
+}
+
+.rate-card-actions {
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+/* Footer */
+.footer {
+  background: white;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.footer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 10px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1000;
+  max-width: 300px;
+  animation: slideIn 0.3s ease;
+  border-left: 4px solid #3b82f6;
+}
+
+.toast-success {
+  border-left-color: #22c55e;
+}
+
+.toast-error {
+  border-left-color: #ef4444;
+}
+
+.toast-info {
+  border-left-color: #3b82f6;
+}
+
+.toast-warning {
+  border-left-color: #f59e0b;
+}
+
+.toast-icon {
+  font-size: 1.1em;
+}
+
+.toast-message {
+  flex: 1;
+  color: #1e293b;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  font-size: 1.2em;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toast-close:hover {
+  color: #64748b;
+}
+
+/* Custom scrollbar */
+.rates-list-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rates-list-scrollable::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.rates-list-scrollable::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.rates-list-scrollable::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Animations */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Transition Animations */
+.list-move {
+  transition: transform 0.3s ease;
+}
+
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.3s ease;
+}
+
+.list-enter-from,
+.list-leave-to {
   opacity: 0;
+  transform: translateX(10px);
+}
+
+.slide-fade-enter-active,
+.slide-fade-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .container {
+    padding: 8px;
+  }
+  
+  .header {
+    padding: 12px;
+  }
+  
+  h1 {
+    font-size: 1.2rem;
+  }
+  
+  .header-controls {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  
+  .status-section {
+    align-items: flex-end;
+  }
+  
+  .top-controls {
+    flex-direction: column;
+  }
+  
+  .action-buttons {
+    width: 100%;
+  }
+  
+  .btn-action {
+    flex: 1;
+  }
+  
+  .rate-card-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .rate-display {
+    width: 100%;
+    text-align: left;
+    align-items: flex-start;
+  }
+  
+  .currency-info {
+    width: 100%;
+  }
+  
+  .currency-flag {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  .currency-flag {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .currency-details h3 {
+    font-size: 0.95rem;
+  }
+  
+  .rate-value {
+    font-size: 0.95rem;
+  }
+  
+  .refresh-countdown {
+    display: none;
+  }
+  
+  .toast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    max-width: none;
+  }
+}
+
+@media (min-width: 1400px) {
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
 }
 </style>
