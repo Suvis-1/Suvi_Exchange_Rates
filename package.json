@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "deploy": "gh-pages -d dist"
   },
-  "homepage": "https://suvis-1.github.io/Suvi_Exchange_Rates",
+  "homepage": "https://suvis-1.github.io/Suvi_Exchange_Rates/",
   "dependencies": {
     "vue": "^3.5.26",
     "vue-router": "^4.6.4"

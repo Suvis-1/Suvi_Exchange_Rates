@@ -15,5 +15,5 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
-  base: '/Suvi_Exchange_Rates/', 
+  base: '/Suvi_Exchange_Rates/'  
 })
