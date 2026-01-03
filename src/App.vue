@@ -2,39 +2,43 @@
   <div class="container">
     <!-- Header -->
     <header class="header">
-      <div class="header-top">
-        <h1>
-          <span class="currency-icon">💱</span>
-          Suvi Currency Exchange Rates
-        </h1>
-        <div class="header-controls">
-          <div class="status-section">
-            <div class="status-indicator" :class="{ 'status-error': hasError }">
-              <span class="status-dot"></span>
-              {{ statusText }}
-            </div>
-            <div class="auto-refresh-header" v-if="!hasError">
-              <label class="refresh-label">
-                <input type="checkbox" v-model="autoRefresh" class="refresh-toggle" />
-                <span class="refresh-text">Auto-refresh</span>
-              </label>
-              <div class="refresh-countdown" v-if="autoRefresh">
-                {{ formatCountdown }}
-              </div>
-            </div>
-          </div>
-          <button @click="refreshNow" class="btn-refresh" :disabled="isRefreshing">
-            <span class="refresh-icon" :class="{ 'refresh-icon-spinning': isRefreshing }">
-              {{ isRefreshing ? '⏳' : '🔄' }}
-            </span>
-          </button>
+  <div class="header-top">
+    <h1>
+      <img src="/SuviExchangeLogo.png" alt="Suvi Exchange Logo" class="currency-logo" />
+      Suvi Currency Exchange Rates
+    </h1>
+    
+    <!-- Add vertical separator line -->
+    <div class="header-separator"></div>
+    
+    <div class="header-controls">
+      <div class="status-section">
+        <div class="status-indicator" :class="{ 'status-error': hasError }">
+          <span class="status-dot"></span>
+          {{ statusText }}
         </div>
+        <div class="auto-refresh-header" v-if="!hasError">
+          <label class="refresh-label">
+            <input type="checkbox" v-model="autoRefresh" class="refresh-toggle" />
+            <span class="refresh-text">Auto-refresh</span>
+          </label>
+          <div class="refresh-countdown" v-if="autoRefresh">
+            {{ formatCountdown }}
+          </div>
+        </div>
+        <p class="timestamp" v-if="timestamp">
+          <span class="timestamp-icon">🕒</span>
+          {{ timestamp }}
+        </p>
       </div>
-      <p class="timestamp" v-if="timestamp">
-        <span class="timestamp-icon">🕒</span>
-        {{ timestamp }}
-      </p>
-    </header>
+      <button @click="refreshNow" class="btn-refresh" :disabled="isRefreshing">
+        <span class="refresh-icon" :class="{ 'refresh-icon-spinning': isRefreshing }">
+          {{ isRefreshing ? '⏳' : '🔄' }}
+        </span>
+      </button>
+    </div>
+  </div>
+</header>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -49,6 +53,7 @@
               class="search-input"
               @focus="showSearchResults = true"
               @blur="onSearchBlur"
+              @mousedown="handleSearchMouseDown"
             />
             <button v-if="searchQuery" @click="clearSearch" class="clear-search" title="Clear search">
               ×
@@ -180,16 +185,6 @@
         </div>
       </div>
     </main>
-
-    <!-- Footer -->
-    <footer class="footer">
-      <div class="footer-content">
-        <div class="footer-info">
-          <span class="data-source">Live Market Rates</span>
-          <span class="app-version">v2.0</span>
-        </div>
-      </div>
-    </footer>
     
     <!-- Toast notifications -->
     <transition name="slide-up">
@@ -418,6 +413,22 @@ const specialCurrencies = {
   XAG: { symbol: '🥈', name: 'Silver (ounce)' },
   XPT: { symbol: '⚙️', name: 'Platinum' },
   XPD: { symbol: '🔩', name: 'Palladium' },
+
+
+  // Major fiat currencies
+  USD: { symbol: '$', name: 'US Dollar', flag: 'us' },
+  JPY: { symbol: '¥', name: 'Japanese Yen', flag: 'jp' },
+  GBP: { symbol: '£', name: 'British Pound', flag: 'gb' },
+  AUD: { symbol: '$', name: 'Australian Dollar', flag: 'au' },
+  CAD: { symbol: '$', name: 'Canadian Dollar', flag: 'ca' },
+  CHF: { symbol: 'Fr', name: 'Swiss Franc', flag: 'ch' },
+  CNY: { symbol: '¥', name: 'Chinese Yuan', flag: 'cn' },
+  INR: { symbol: '₹', name: 'Indian Rupee', flag: 'in' },
+  BRL: { symbol: 'R$', name: 'Brazilian Real', flag: 'br' },
+  RUB: { symbol: '₽', name: 'Russian Ruble', flag: 'ru' },
+  KRW: { symbol: '₩', name: 'South Korean Won', flag: 'kr' },
+  MXN: { symbol: '$', name: 'Mexican Peso', flag: 'mx' },
+  ZAR: { symbol: 'R', name: 'South African Rand', flag: 'za' },
   
   // Historical currencies
   ATS: { symbol: 'ÖS', name: 'Austrian Schilling' },
@@ -458,9 +469,160 @@ const specialCurrencies = {
 
 // Function to generate currency name for unknown currencies
 function generateCurrencyName(code) {
-  // Check if it's a cryptocurrency (3-4 letters, no numbers except at end)
+  // Check if it's already in specialCurrencies
+  if (specialCurrencies[code]) {
+    return specialCurrencies[code].name
+  }
+  
+  // Comprehensive currency names database
+  const currencyNames = {
+    // Major currencies
+    'USD': 'US Dollar',
+    'EUR': 'Euro',
+    'JPY': 'Japanese Yen',
+    'GBP': 'British Pound',
+    'AUD': 'Australian Dollar',
+    'CAD': 'Canadian Dollar',
+    'CHF': 'Swiss Franc',
+    'CNY': 'Chinese Yuan',
+    'HKD': 'Hong Kong Dollar',
+    'NZD': 'New Zealand Dollar',
+    
+    // Asian currencies
+    'INR': 'Indian Rupee',
+    'KRW': 'South Korean Won',
+    'SGD': 'Singapore Dollar',
+    'THB': 'Thai Baht',
+    'TWD': 'New Taiwan Dollar',
+    'IDR': 'Indonesian Rupiah',
+    'MYR': 'Malaysian Ringgit',
+    'PHP': 'Philippine Peso',
+    'VND': 'Vietnamese Dong',
+    'PKR': 'Pakistani Rupee',
+    'BDT': 'Bangladeshi Taka',
+    'LKR': 'Sri Lankan Rupee',
+    'NPR': 'Nepalese Rupee',
+    'MMK': 'Burmese Kyat',
+    'KHR': 'Cambodian Riel',
+    'LAK': 'Lao Kip',
+    'MNT': 'Mongolian Tugrik',
+    
+    // Middle Eastern currencies
+    'AED': 'UAE Dirham',
+    'SAR': 'Saudi Riyal',
+    'QAR': 'Qatari Riyal',
+    'OMR': 'Omani Rial',
+    'KWD': 'Kuwaiti Dinar',
+    'BHD': 'Bahraini Dinar',
+    'JOD': 'Jordanian Dinar',
+    'ILS': 'Israeli New Shekel',
+    'IRR': 'Iranian Rial',
+    'IQD': 'Iraqi Dinar',
+    'YER': 'Yemeni Rial',
+    'SYP': 'Syrian Pound',
+    'LBP': 'Lebanese Pound',
+    
+    // European currencies
+    'SEK': 'Swedish Krona',
+    'NOK': 'Norwegian Krone',
+    'DKK': 'Danish Krone',
+    'PLN': 'Polish Złoty',
+    'CZK': 'Czech Koruna',
+    'HUF': 'Hungarian Forint',
+    'RON': 'Romanian Leu',
+    'BGN': 'Bulgarian Lev',
+    'HRK': 'Croatian Kuna',
+    'RSD': 'Serbian Dinar',
+    'ALL': 'Albanian Lek',
+    'MKD': 'Macedonian Denar',
+    'BAM': 'Bosnia-Herzegovina Convertible Mark',
+    'GEL': 'Georgian Lari',
+    'AMD': 'Armenian Dram',
+    'AZN': 'Azerbaijani Manat',
+    
+    // African currencies
+    'ZAR': 'South African Rand',
+    'EGP': 'Egyptian Pound',
+    'NGN': 'Nigerian Naira',
+    'KES': 'Kenyan Shilling',
+    'ETB': 'Ethiopian Birr',
+    'GHS': 'Ghanaian Cedi',
+    'TZS': 'Tanzanian Shilling',
+    'UGX': 'Ugandan Shilling',
+    'MAD': 'Moroccan Dirham',
+    'DZD': 'Algerian Dinar',
+    'SDG': 'Sudanese Pound',
+    'TND': 'Tunisian Dinar',
+    'LYD': 'Libyan Dinar',
+    'XOF': 'West African CFA Franc',
+    'XAF': 'Central African CFA Franc',
+    'CDF': 'Congolese Franc',
+    'RWF': 'Rwandan Franc',
+    'BIF': 'Burundian Franc',
+    'DJF': 'Djiboutian Franc',
+    'SOS': 'Somali Shilling',
+    'MZN': 'Mozambican Metical',
+    'ZMW': 'Zambian Kwacha',
+    'MWK': 'Malawian Kwacha',
+    'AOA': 'Angolan Kwanza',
+    'MUR': 'Mauritian Rupee',
+    'SCR': 'Seychellois Rupee',
+    'MVR': 'Maldivian Rufiyaa',
+    
+    // Americas currencies
+    'BRL': 'Brazilian Real',
+    'MXN': 'Mexican Peso',
+    'ARS': 'Argentine Peso',
+    'CLP': 'Chilean Peso',
+    'COP': 'Colombian Peso',
+    'PEN': 'Peruvian Sol',
+    'UYU': 'Uruguayan Peso',
+    'PYG': 'Paraguayan Guaraní',
+    'BOB': 'Bolivian Boliviano',
+    'GTQ': 'Guatemalan Quetzal',
+    'CRC': 'Costa Rican Colón',
+    'PAB': 'Panamanian Balboa',
+    'DOP': 'Dominican Peso',
+    'HTG': 'Haitian Gourde',
+    'JMD': 'Jamaican Dollar',
+    'TTD': 'Trinidad and Tobago Dollar',
+    'BSD': 'Bahamian Dollar',
+    'BBD': 'Barbadian Dollar',
+    'XCD': 'East Caribbean Dollar',
+    'BZD': 'Belize Dollar',
+    
+    // Cryptocurrencies (already in specialCurrencies, but added for completeness)
+    'BTC': 'Bitcoin',
+    'ETH': 'Ethereum',
+    'BNB': 'Binance Coin',
+    'ADA': 'Cardano',
+    'SOL': 'Solana',
+    'XRP': 'Ripple',
+    'DOT': 'Polkadot',
+    'DOGE': 'Dogecoin',
+    'LTC': 'Litecoin',
+    'BCH': 'Bitcoin Cash',
+    'LINK': 'Chainlink',
+    'XLM': 'Stellar',
+    'UNI': 'Uniswap',
+    'USDT': 'Tether',
+    'USDC': 'USD Coin',
+    
+    // Other special currencies
+    'XAU': 'Gold (ounce)',
+    'XAG': 'Silver (ounce)',
+    'XPT': 'Platinum',
+    'XPD': 'Palladium',
+    'XDR': 'Special Drawing Rights',
+  }
+  
+  if (currencyNames[code]) {
+    return currencyNames[code]
+  }
+  
+  // If not found in our database, check patterns
   if (/^[A-Z]{3,4}$/.test(code)) {
-    // Common cryptocurrency patterns
+    // Could be a lesser-known cryptocurrency
     const cryptoPatterns = {
       'BTC': 'Bitcoin',
       'ETH': 'Ethereum', 
@@ -487,68 +649,14 @@ function generateCurrencyName(code) {
       return cryptoPatterns[code]
     }
     
-    // Generic cryptocurrency name
-    return `${code} Cryptocurrency`
+    // Generic name for unknown 3-4 letter codes
+    return `${code}`
   }
   
-  // Check if it's a precious metal
-  if (code.startsWith('X')) {
-    const metalPatterns = {
-      'XAU': 'Gold',
-      'XAG': 'Silver', 
-      'XPT': 'Platinum',
-      'XPD': 'Palladium',
-      'XCG': 'East Caribbean Gold',
-      'XDR': 'Special Drawing Rights',
-    }
-    if (metalPatterns[code]) {
-      return metalPatterns[code]
-    }
-  }
-  
-  // Historical/obsolete currency detection
-  const historicalPatterns = {
-    'ATS': 'Austrian Schilling',
-    'BEF': 'Belgian Franc',
-    'CYP': 'Cypriot Pound',
-    'DEM': 'German Mark',
-    'EEK': 'Estonian Kroon',
-    'ESP': 'Spanish Peseta',
-    'FIM': 'Finnish Markka',
-    'FRF': 'French Franc',
-    'GRD': 'Greek Drachma',
-    'IEP': 'Irish Pound',
-    'ITL': 'Italian Lira',
-    'LTL': 'Lithuanian Litas',
-    'LUF': 'Luxembourg Franc',
-    'LVL': 'Latvian Lats',
-    'MGF': 'Malagasy Franc',
-    'MRO': 'Mauritanian Ouguiya',
-    'MZM': 'Mozambican Metical',
-    'MTL': 'Maltese Lira',
-    'NLG': 'Dutch Guilder',
-    'PTE': 'Portuguese Escudo',
-    'SDD': 'Sudanese Dinar',
-    'SIT': 'Slovenian Tolar',
-    'SKK': 'Slovak Koruna',
-    'SRG': 'Surinamese Guilder',
-    'STD': 'São Tomé Dobra',
-    'TRL': 'Turkish Lira (old)',
-    'VEB': 'Venezuelan Bolívar (old)',
-    'VEF': 'Venezuelan Bolívar Fuerte',
-    'ZMK': 'Zambian Kwacha (old)',
-    'ZWD': 'Zimbabwean Dollar (old)',
-    'ZWG': 'Zimbabwean Gold',
-    'ZWL': 'Zimbabwean Dollar (new)',
-  }
-  
-  if (historicalPatterns[code]) {
-    return historicalPatterns[code]
-  }
-  
-  // Default: return code as name
+  // Default fallback
   return `${code} Currency`
 }
+
 
 // Currency metadata with names - dynamically generated
 const currencyMetadata = computed(() => {
@@ -570,7 +678,42 @@ const currencyMetadata = computed(() => {
   return metadata
 })
 
-const suggestedCurrencies = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'BNB', 'SOL', 'XRP', 'LINK']
+//this function to create a search index 
+function createCurrencySearchIndex(code) {
+  const meta = currencyMetadata.value[code]
+  if (!meta) return []
+  
+  const searchTerms = [code.toLowerCase(), meta.name.toLowerCase()]
+  
+  // Add common aliases based on currency type
+  const aliases = {
+    'INR': ['rupee', 'india', 'indian', 'indian rupee', '₹'],
+    'USD': ['dollar', 'usd', 'us', 'us dollar', '$'],
+    'EUR': ['euro', 'europe', 'european', '€'],
+    'GBP': ['pound', 'sterling', 'british', 'british pound', 'uk', '£'],
+    'JPY': ['yen', 'japan', 'japanese', 'japanese yen', '¥'],
+    'CNY': ['yuan', 'china', 'chinese', 'chinese yuan', 'rmb'],
+    'RUB': ['ruble', 'russia', 'russian', 'russian ruble', '₽'],
+    'KRW': ['won', 'korea', 'korean', 'south korean won', '₩'],
+    'THB': ['baht', 'thailand', 'thai', 'thai baht'],
+    'IDR': ['rupiah', 'indonesia', 'indonesian'],
+    'PHP': ['peso', 'philippines', 'philippine'],
+    'MYR': ['ringgit', 'malaysia', 'malaysian'],
+    'VND': ['dong', 'vietnam', 'vietnamese'],
+    'PKR': ['pakistan rupee', 'pakistani rupee'],
+    'LKR': ['sri lanka rupee', 'sri lankan rupee'],
+    'NPR': ['nepal rupee', 'nepalese rupee'],
+    'MVR': ['rufiyaa', 'maldives', 'maldivian'],
+    'SCR': ['seychelles rupee'],
+    'MUR': ['mauritius rupee'],
+  }
+  
+  if (aliases[code]) {
+    searchTerms.push(...aliases[code])
+  }
+  
+  return searchTerms
+}
 
 // Computed properties
 const allCodes = computed(() => {
@@ -582,20 +725,32 @@ const allCodes = computed(() => {
 const filteredResults = computed(() => {
   if (!searchQuery.value) return []
   
-  const query = searchQuery.value.toLowerCase()
+  const query = searchQuery.value.toLowerCase().trim()
   const addedCodes = new Set(displayedCurrencies.value)
   
+  // If query is very short (1-2 chars), only search by code
+  if (query.length <= 2) {
+    return allCodes.value
+      .filter(code => {
+        if (addedCodes.has(code)) return false
+        return code.toLowerCase().includes(query)
+      })
+      .slice(0, 8)
+      .map(code => ({
+        code,
+        name: currencyMetadata.value[code]?.name || generateCurrencyName(code),
+      }))
+  }
+  
+  // For longer queries, use full search
   return allCodes.value
     .filter(code => {
-      const meta = currencyMetadata.value[code]
-      if (!meta) return false
+      if (addedCodes.has(code)) return false
       
-      const codeMatch = code.toLowerCase().includes(query)
-      const nameMatch = meta.name.toLowerCase().includes(query)
-      
-      return (codeMatch || nameMatch) && !addedCodes.has(code)
+      const searchTerms = createCurrencySearchIndex(code)
+      return searchTerms.some(term => term.includes(query))
     })
-    .slice(0, 12) // Increased from 8 to 12 to show more results
+    .slice(0, 12)
     .map(code => ({
       code,
       name: currencyMetadata.value[code]?.name || generateCurrencyName(code),
@@ -609,6 +764,7 @@ const statusText = computed(() => {
   return 'Live'
 })
 
+// Add this missing computed property:
 const formatCountdown = computed(() => {
   if (countdown.value <= 0) return '0s'
   return `${countdown.value}s`
@@ -760,17 +916,56 @@ function formatRate(code) {
   
   let value = isInverse.value ? (1 / rate) : rate
   
-  // Format based on value
-  if (value >= 1000) {
-    return value.toLocaleString('en-US', { maximumFractionDigits: 2 })
-  } else if (value >= 10) {
-    return value.toLocaleString('en-US', { maximumFractionDigits: 3 })
-  } else if (value >= 1) {
-    return value.toLocaleString('en-US', { maximumFractionDigits: 4 })
-  } else if (value >= 0.01) {
-    return value.toLocaleString('en-US', { maximumFractionDigits: 6 })
+  // For very small values (less than 0.001), always show the actual value
+  if (Math.abs(value) < 0.001) {
+    // Show the actual number without rounding to zero
+    const fixedValue = value.toFixed(10) // Use 10 decimal places to capture small values
+    // Remove trailing zeros
+    const trimmed = fixedValue.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '')
+    
+    // If still very small and might not show enough digits
+    if (trimmed === '0' || trimmed === '0.0' || trimmed === '0.00') {
+      // Force showing at least 8 decimal places for extremely small values
+      return value.toFixed(8).replace(/(\.\d*?[1-9])0+$/, '$1')
+    }
+    
+    return trimmed
+  }
+  
+  // For regular values, show 5 total digits
+  return formatToFiveDigits(value)
+}
+
+function formatToFiveDigits(num) {
+  // Convert to string to check
+  const str = num.toString()
+  
+  // If in scientific notation, convert to regular
+  if (str.includes('e')) {
+    const fixed = num.toFixed(20).replace(/\.?0+$/, '')
+    return formatToFiveDigits(parseFloat(fixed))
+  }
+  
+  // Get integer part length
+  const integerPart = Math.floor(num)
+  const integerDigits = integerPart.toString().length
+  
+  if (integerDigits >= 5) {
+    // 5+ integer digits: show as integer
+    return integerPart.toLocaleString('en-US')
+  } else if (integerDigits >= 1) {
+    // 1-4 integer digits: show them + decimal digits to make 5 total
+    const decimalDigitsNeeded = 5 - integerDigits
+    return num.toLocaleString('en-US', {
+      minimumFractionDigits: decimalDigitsNeeded,
+      maximumFractionDigits: decimalDigitsNeeded
+    })
   } else {
-    return value.toExponential(4)
+    // Less than 1: always show 5 decimal places
+    return num.toLocaleString('en-US', {
+      minimumFractionDigits: 5,
+      maximumFractionDigits: 5
+    })
   }
 }
 
@@ -843,7 +1038,8 @@ function addCurrency(code) {
     showToast(`${getCurrencyName(code)} added`, 'success', '✅')
   }
   searchQuery.value = ''
-  showSearchResults.value = false
+  // Don't hide results immediately - let user continue searching
+  // showSearchResults.value = false
 }
 
 function removeCurrency(code) {
@@ -852,7 +1048,7 @@ function removeCurrency(code) {
 }
 
 function resetToDefaults() {
-  displayedCurrencies.value = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'SOL', 'XRP']
+  displayedCurrencies.value = ['USD', 'EUR', 'JPY']
   showToast('Crypto defaults loaded', 'info', '🔄')
 }
 
@@ -862,9 +1058,17 @@ function clearSearch() {
 }
 
 function onSearchBlur() {
+  // Use a longer delay to ensure click events on results are processed
   setTimeout(() => {
     showSearchResults.value = false
-  }, 200)
+  }, 300) // Increased from 200ms to 300ms
+}
+
+function handleSearchMouseDown() {
+  // If search results are hidden but we have a query, show them
+  if (searchQuery.value && !showSearchResults.value) {
+    showSearchResults.value = true
+  }
 }
 
 function showToast(message, type = 'info', icon = 'ℹ️') {
@@ -927,7 +1131,7 @@ function saveUserPreferences() {
   max-width: 100%;
   height: 100vh;
   padding: 12px;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: linear-gradient(135deg, #035eb9 0%, #035eb9 100%);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #334155;
   display: flex;
@@ -949,20 +1153,25 @@ function saveUserPreferences() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 0; /* Remove bottom margin */
+  gap: 20px; /* Add gap between elements */
 }
 
 h1 {
   color: #1e293b;
-  font-size: 1.4rem;
+  font-size: 2.5rem; /* Slightly reduced from 3rem */
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1; /* Allow it to take available space */
 }
 
-.currency-icon {
-  font-size: 1.3em;
+.currency-logo {
+  width: 150px; 
+  height: 150px; 
+  object-fit: contain;
+  margin-right: 8px;
 }
 
 .header-controls {
@@ -971,23 +1180,47 @@ h1 {
   gap: 16px;
 }
 
+/* Vertical separator line */
+.header-separator {
+  width: 1px;
+  height: 60px; /* Adjust height as needed */
+  background-color: #e2e8f0; /* Light gray color */
+  margin: 0 20px; /* Space on both sides */
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px; /* Increased gap */
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Status section - make it neat */
 .status-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px; /* Slightly more gap */
   align-items: flex-end;
+  min-width: 200px;
+  background: #f8fafc; /* Light background */
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0; /* Border for neat appearance */
 }
 
+/* Status indicator */
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 12px;
   background: #dcfce7;
-  border-radius: 16px;
-  font-size: 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
   font-weight: 500;
   color: #166534;
+  width: 100%;
+  justify-content: center;
 }
 
 .status-error {
@@ -996,8 +1229,8 @@ h1 {
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   background: #22c55e;
   border-radius: 50%;
   animation: pulse 2s infinite;
@@ -1008,30 +1241,31 @@ h1 {
   animation: none;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
+/* Auto-refresh header */
 .auto-refresh-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.75rem;
+  gap: 10px;
+  font-size: 0.8rem;
+  width: 100%;
+  justify-content: center;
+  padding: 6px 0;
+  border-top: 1px solid #e2e8f0; /* Separator line */
+  border-bottom: 1px solid #e2e8f0; /* Separator line */
 }
 
 .refresh-label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
   user-select: none;
   color: #475569;
 }
 
 .refresh-toggle {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   cursor: pointer;
   accent-color: #3b82f6;
 }
@@ -1043,37 +1277,58 @@ h1 {
 .refresh-countdown {
   background: #3b82f6;
   color: white;
-  padding: 2px 6px;
-  border-radius: 10px;
+  padding: 3px 8px;
+  border-radius: 12px;
   font-weight: 600;
-  min-width: 24px;
+  min-width: 28px;
   text-align: center;
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
+/* Timestamp */
+.timestamp {
+  color: #64748b;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.timestamp-icon {
+  font-size: 0.9em;
+}
+
+/* Refresh button */
 .btn-refresh {
-  width: 36px;
-  height: 36px;
+  width: 50px;
+  height: 50px;
   border: none;
-  background: #f1f5f9;
+  background: #3b82f6; /* Blue background */
+  color: white;
   border-radius: 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1em;
+  font-size: 1.5em;
   transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
 }
 
 .btn-refresh:hover:not(:disabled) {
-  background: #e2e8f0;
+  background: #2563eb;
   transform: rotate(15deg);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
 }
 
 .btn-refresh:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none !important;
 }
 
 .refresh-icon-spinning {
@@ -1583,29 +1838,6 @@ h1 {
   color: #dc2626;
 }
 
-/* Footer */
-.footer {
-  background: white;
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-top: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  flex-shrink: 0;
-}
-
-.footer-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.footer-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.7rem;
-  color: #94a3b8;
-}
-
 /* Toast */
 .toast {
   position: fixed;
@@ -1744,85 +1976,51 @@ h1 {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .container {
-    padding: 8px;
+  .header-top {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
   }
   
-  .header {
-    padding: 12px;
-  }
-  
-  h1 {
-    font-size: 1.2rem;
+  .header-separator {
+    display: none; /* Hide separator on mobile */
   }
   
   .header-controls {
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
+    width: 100%;
+    justify-content: space-between;
   }
   
   .status-section {
-    align-items: flex-end;
-  }
-  
-  .top-controls {
-    flex-direction: column;
-  }
-  
-  .action-buttons {
+    min-width: auto;
     width: 100%;
+    align-items: center;
   }
   
-  .btn-action {
-    flex: 1;
+  h1 {
+    font-size: 1.8rem;
+    text-align: center;
+    justify-content: center;
   }
   
-  .rate-card-content {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  
-  .rate-display {
-    width: 100%;
-    text-align: left;
-    align-items: flex-start;
-  }
-  
-  .currency-info {
-    width: 100%;
-  }
-  
-  .currency-flag {
-    width: 36px;
-    height: 36px;
+  .currency-logo {
+    width: 50px;
+    height: 50px;
   }
 }
 
 @media (max-width: 480px) {
-  .currency-flag {
-    width: 32px;
-    height: 32px;
+  .header-controls {
+    flex-direction: column;
+    gap: 12px;
   }
   
-  .currency-details h3 {
-    font-size: 0.95rem;
+  .btn-refresh {
+    align-self: flex-end;
   }
   
-  .rate-value {
-    font-size: 0.95rem;
-  }
-  
-  .refresh-countdown {
-    display: none;
-  }
-  
-  .toast {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    max-width: none;
+  .status-section {
+    padding: 10px;
   }
 }
 
