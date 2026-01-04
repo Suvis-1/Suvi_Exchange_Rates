@@ -1081,16 +1081,16 @@ function loadUserPreferences() {
       if (prefs.currencies && Array.isArray(prefs.currencies) && prefs.currencies.length > 0) {
         displayedCurrencies.value = prefs.currencies
       } else {
-        displayedCurrencies.value = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'SOL', 'XRP']
+        displayedCurrencies.value = ['USD', 'EUR', 'JPY', 'BTC']
       }
       if (prefs.isInverse !== undefined) isInverse.value = prefs.isInverse
       if (prefs.autoRefresh !== undefined) autoRefresh.value = prefs.autoRefresh
     } else {
-      displayedCurrencies.value = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'SOL', 'XRP']
+      displayedCurrencies.value = ['USD', 'EUR', 'JPY', 'BTC']
     }
   } catch (err) {
     console.error('Failed to load preferences:', err)
-    displayedCurrencies.value = ['BTC', 'ETH', 'USD', 'EUR', 'JPY', 'ADA', 'SOL', 'XRP']
+    displayedCurrencies.value = ['USD', 'EUR', 'JPY', 'BTC']
   }
 }
 
