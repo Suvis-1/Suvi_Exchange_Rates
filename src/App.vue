@@ -94,9 +94,6 @@
           <button @click="toggleInverse" class="btn-action" :class="{ 'btn-active': isInverse }" title="Toggle view">
             {{ isInverse ? '1 CUR = X GBP' : '1 GBP = X' }}
           </button>
-          <button @click="resetToDefaults" class="btn-action" title="Reset to defaults">
-            🔄
-          </button>
         </div>
       </div>
 
@@ -129,9 +126,6 @@
           <div class="empty-icon">📊</div>
           <h3>No currencies added</h3>
           <p>Search for currencies above or</p>
-          <button @click="resetToDefaults" class="btn-action">
-            Load Defaults
-          </button>
         </div>
         
         <!-- Scrollable rates list -->
@@ -1045,11 +1039,6 @@ function addCurrency(code) {
 function removeCurrency(code) {
   displayedCurrencies.value = displayedCurrencies.value.filter(c => c !== code)
   showToast(`${getCurrencyName(code)} removed`, 'info', '🗑️')
-}
-
-function resetToDefaults() {
-  displayedCurrencies.value = ['USD', 'EUR', 'JPY']
-  showToast('Crypto defaults loaded', 'info', '🔄')
 }
 
 function clearSearch() {
