@@ -92,7 +92,7 @@
         
         <div class="action-buttons">
           <button @click="toggleInverse" class="btn-action" :class="{ 'btn-active': isInverse }" title="Toggle view">
-            {{ isInverse ? '1 CUR = X GBP' : '1 GBP = X' }}
+            {{ isInverse ? '1 CUR = X GBP' : '1 GBP = X CUR' }}
           </button>
         </div>
       </div>
