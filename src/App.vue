@@ -26,16 +26,12 @@
             {{ formatCountdown }}
           </div>
         </div>
-        <p class="timestamp" v-if="timestamp">
+        <p class="timestamp">
           <span class="timestamp-icon">🕒</span>
-          {{ timestamp }}
+          <span v-if="timestamp">{{ timestamp }}</span>
+          <span v-else class="timestamp-placeholder">00 XXX, 00:00:00</span>
         </p>
-      </div>
-      <button @click="refreshNow" class="btn-refresh" :disabled="isRefreshing">
-        <span class="refresh-icon" :class="{ 'refresh-icon-spinning': isRefreshing }">
-          {{ isRefreshing ? '⏳' : '🔄' }}
-        </span>
-      </button>
+      </div>      
     </div>
   </div>
 </header>
@@ -1132,7 +1128,7 @@ function saveUserPreferences() {
 .header {
   background: white;
   border-radius: 12px;
-  padding: 16px;
+  padding: 12px 16px;
   margin-bottom: 12px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
@@ -1142,23 +1138,23 @@ function saveUserPreferences() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0; /* Remove bottom margin */
-  gap: 20px; /* Add gap between elements */
+  margin-bottom: 0;
+  gap: 20px;
 }
 
 h1 {
   color: #1e293b;
-  font-size: 2.5rem; /* Slightly reduced from 3rem */
+  font-size: 1.8rem;
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1; /* Allow it to take available space */
+  flex: 1;
 }
 
 .currency-logo {
-  width: 150px; 
-  height: 150px; 
+  width: 60px;
+  height: 60px;
   object-fit: contain;
   margin-right: 8px;
 }
@@ -1172,40 +1168,40 @@ h1 {
 /* Vertical separator line */
 .header-separator {
   width: 1px;
-  height: 60px; /* Adjust height as needed */
-  background-color: #e2e8f0; /* Light gray color */
-  margin: 0 20px; /* Space on both sides */
+  height: 45px;
+  background-color: #e2e8f0;
+  margin: 0 15px;
 }
 
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 20px; /* Increased gap */
-  flex-shrink: 0; /* Prevent shrinking */
+  gap: 20px;
+  flex-shrink: 0;
 }
 
 /* Status section - make it neat */
 .status-section {
   display: flex;
   flex-direction: column;
-  gap: 8px; /* Slightly more gap */
+  gap: 6px;
   align-items: flex-end;
-  min-width: 200px;
-  background: #f8fafc; /* Light background */
-  padding: 12px 16px;
+  min-width: 180px;
+  background: #f8fafc;
+  padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid #e2e8f0; /* Border for neat appearance */
+  border: 1px solid #e2e8f0;
 }
 
 /* Status indicator */
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 6px 10px;
   background: #dcfce7;
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: #166534;
   width: 100%;
@@ -1234,13 +1230,13 @@ h1 {
 .auto-refresh-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.8rem;
+  gap: 8px;
+  font-size: 0.75rem;
   width: 100%;
   justify-content: center;
-  padding: 6px 0;
-  border-top: 1px solid #e2e8f0; /* Separator line */
-  border-bottom: 1px solid #e2e8f0; /* Separator line */
+  padding: 4px 0;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .refresh-label {
@@ -1278,58 +1274,19 @@ h1 {
 /* Timestamp */
 .timestamp {
   color: #64748b;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   justify-content: center;
-  padding-top: 4px;
+  padding-top: 2px;
+  min-height: 20px; 
 }
 
-.timestamp-icon {
-  font-size: 0.9em;
-}
-
-/* Refresh button */
-.btn-refresh {
-  width: 50px;
-  height: 50px;
-  border: none;
-  background: #3b82f6; /* Blue background */
-  color: white;
-  border-radius: 10px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5em;
-  transition: all 0.2s;
-  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
-}
-
-.btn-refresh:hover:not(:disabled) {
-  background: #2563eb;
-  transform: rotate(15deg);
-  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
-}
-
-.btn-refresh:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
-.refresh-icon-spinning {
-  animation: spin 1s linear infinite;
-}
-
-.timestamp {
-  color: #64748b;
-  font-size: 0.8rem;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.timestamp-placeholder {
+  opacity: 0.4; 
+  font-style: italic;
 }
 
 .timestamp-icon {
@@ -1972,7 +1929,7 @@ h1 {
   }
   
   .header-separator {
-    display: none; /* Hide separator on mobile */
+    display: none;
   }
   
   .header-controls {
@@ -1987,7 +1944,7 @@ h1 {
   }
   
   h1 {
-    font-size: 1.8rem;
+    font-size: 1.5rem;
     text-align: center;
     justify-content: center;
   }
@@ -2003,13 +1960,31 @@ h1 {
     flex-direction: column;
     gap: 12px;
   }
-  
-  .btn-refresh {
-    align-self: flex-end;
-  }
-  
+    
   .status-section {
     padding: 10px;
+  }
+  
+  h1 {
+    font-size: 1.2rem;
+    flex-direction: column;
+    text-align: center;
+    gap: 4px;
+  }
+  
+  .currency-logo {
+    width: 40px;
+    height: 40px;
+    margin-right: 0;
+  }
+  
+  .header-top {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .header-separator {
+    display: none;
   }
 }
 
